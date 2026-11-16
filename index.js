@@ -74,8 +74,8 @@ const state = {
     handledEventRewards: new Set(),
     pendingJoinByChannel: new Map(),
     recentLines: [
-        'Menghubungkan ke gateway Discord...',
-        'Window Discord tidak perlu dibuka / bisa di-minimize.',
+        'Connecting to Discord gateway...',
+        'Discord window does not need focus / can stay minimized.',
     ],
 };
 
@@ -90,7 +90,7 @@ function sleep(ms) {
 }
 
 function timestamp() {
-    return new Date().toLocaleTimeString('id-ID', { hour12: false });
+    return new Date().toLocaleTimeString('en-GB', { hour12: false });
 }
 
 function setBusyLock(locked, maxDurationMs = 8000) {
@@ -135,8 +135,8 @@ function notifyUi(msg, prioSec = 4) {
 }
 
 /**
- * Antrean pengiriman pesan agar command tidak pernah tabrakan di detik yang sama
- * atau mengganggu prompt interaktif seperti 'rpg training'
+ * Serialized command queue so commands never collide at the same second
+ * or interrupt interactive prompts such as 'rpg training'
  */
 function enqueueCommand(cmd, label = 'CMD', priority = false, manual = false) {
     if (state.isStopped) return;
@@ -180,10 +180,10 @@ async function processQueue() {
             } else {
                 notifyUi(`[*] Sent "${cmd}"`, 3);
             }
-            pushFeedLine(`>>> Dikirim: ${cmd}`);
+            pushFeedLine(`>>> Sent: ${cmd}`);
         } catch (err) {
-            notifyUi(`[E] Gagal kirim "${cmd}": ${err.message}`, 6);
-            pushFeedLine(`[ERROR] Gagal kirim ${cmd}: ${err.message}`);
+            notifyUi(`[E] Failed to send "${cmd}": ${err.message}`, 6);
+            pushFeedLine(`[ERROR] Failed to send ${cmd}: ${err.message}`);
         }
 
         const gap = randomInt(config.safety.queueGapMs.min, config.safety.queueGapMs.max);
@@ -195,7 +195,7 @@ async function processQueue() {
 }
 
 /**
- * Menjadwalkan eksekusi command berikutnya dengan jeda acak (random jitter)
+ * Schedules the next execution of a command with random jitter
  */
 function scheduleNext(key, customDelayMs = null) {
     if (state.isStopped) return;
@@ -239,7 +239,7 @@ function scheduleNext(key, customDelayMs = null) {
 }
 
 /**
- * Menghentikan semua aktivitas jika EPIC GUARD muncul, memberi tahu user untuk verifikasi manual
+ * Halts all automation immediately when EPIC GUARD appears and alerts the user for manual verification
  */
 function handleEpicGuard(reasonText) {
     if (state.isStopped) return;
@@ -250,23 +250,23 @@ function handleEpicGuard(reasonText) {
     });
     state.queue = [];
 
-    pushFeedLine('🚨 EPIC GUARD TERDETEKSI! Bot dihentikan otomatis.');
-    notifyUi('[!] EPIC GUARD TERDETEKSI! Segera cek Discord!', 30);
+    pushFeedLine('🚨 EPIC GUARD DETECTED! Bot stopped automatically.');
+    notifyUi('[!] EPIC GUARD DETECTED! Check Discord immediately!', 30);
 
     process.stdout.write('\x07');
 
     const exitMsg =
-        chalk.bgRed.white.bold('\n 🚨 PERINGATAN: EPIC GUARD TERDETEKSI! 🚨 \n') +
+        chalk.bgRed.white.bold('\n 🚨 WARNING: EPIC GUARD DETECTED! 🚨 \n') +
         chalk.yellow(
-            'Bot dihentikan otomatis demi keamanan akun kamu.\nSilakan buka Discord dan selesaikan verifikasi secara manual!\n'
+            'Automation was stopped automatically to protect your account.\nPlease open Discord and complete the verification manually!\n'
         ) +
-        chalk.gray(`Detail: ${String(reasonText).slice(0, 200)}\n`);
+        chalk.gray(`Details: ${String(reasonText).slice(0, 200)}\n`);
 
     if (config.safety.desktopNotificationOnGuard) {
         notifier.notify({
-            title: '🚨 EPIC GUARD Terdeteksi!',
+            title: '🚨 EPIC GUARD Detected!',
             message:
-                'Otomatisasi dihentikan. Segera buka Discord dan selesaikan verifikasi secara manual.',
+                'Automation paused/stopped. Open Discord immediately and complete the verification manually.',
             sound: true,
             wait: false,
         });
@@ -279,7 +279,7 @@ function handleEpicGuard(reasonText) {
 }
 
 /**
- * Parsing durasi dari teks seperti "(1d 20h 4m 4s)" atau "48m 20s" ke milidetik
+ * Parses duration strings like "(1d 20h 4m 4s)" or "48m 20s" into milliseconds
  */
 function parseDurationMs(text) {
     if (!text) return null;
@@ -298,14 +298,14 @@ function parseDurationMs(text) {
 }
 
 /**
- * Parsing embed penuh dari 'rpg cd' (contoh: "<username> — cooldowns")
+ * Parses the full 'rpg cd' embed (e.g. "<username> — cooldowns")
  */
 function syncFromCooldownEmbed(embed) {
     if (!embed || !embed.fields) return;
     const allLines = embed.fields.map((f) => f.value || '').join('\n').split('\n');
 
     const mapping = [
-        // Active (bisa di-auto oleh bot)
+        // Active (automated by the bot)
         { regex: /\bdaily\b/i, type: 'active', key: 'daily' },
         { regex: /\bhunt\b/i, type: 'active', key: 'hunt' },
         { regex: /\badventure\b/i, type: 'active', key: 'adventure' },
@@ -313,7 +313,7 @@ function syncFromCooldownEmbed(embed) {
         { regex: /\bchop\b/i, type: 'active', key: 'work' },
         { regex: /\bfarm\b/i, type: 'active', key: 'farm' },
         { regex: /\blootbox\b/i, type: 'active', key: 'lootbox' },
-        // Passive (pemberitahuan status & hitung mundur cooldown)
+        // Passive (status display & cooldown countdown)
         { regex: /\bweekly\b/i, type: 'passive', key: 'weekly' },
         { regex: /\bcard hand\b/i, type: 'passive', key: 'card_hand' },
         { regex: /\bvote\b/i, type: 'passive', key: 'vote' },
@@ -349,12 +349,12 @@ function syncFromCooldownEmbed(embed) {
         }
     }
 
-    notifyUi('[*] Semua Cooldown berhasil disinkronkan dari "rpg cd"!', 4);
-    pushFeedLine('[CD Sync] Timer disinkronkan dengan embed cooldowns EPIC RPG.');
+    notifyUi('[*] All cooldowns synced from "rpg cd"!', 4);
+    pushFeedLine('[CD Sync] Timers synchronized with EPIC RPG cooldowns embed.');
 }
 
 /**
- * Helper untuk klik tombol di pesan Discord atau fallback kirim teks di chat
+ * Helper to click a Discord message button or fall back to sending chat text
  */
 async function answerTrainingPrompt(message, buttonMatcherFn, fallbackText, labelInfo) {
     setBusyLock(true, 6000);
@@ -369,8 +369,8 @@ async function answerTrainingPrompt(message, buttonMatcherFn, fallbackText, labe
                     try {
                         await message.clickButton(btn.customId);
                         clicked = true;
-                        notifyUi(`[*] Training (${labelInfo}) dijawab via tombol: ${fallbackText}`, 4);
-                        pushFeedLine(`[Training ${labelInfo}] Klik tombol: ${fallbackText}`);
+                        notifyUi(`[*] Training (${labelInfo}) answered via button: ${fallbackText}`, 4);
+                        pushFeedLine(`[Training ${labelInfo}] Clicked button: ${fallbackText}`);
                     } catch (_) {
                         clicked = false;
                     }
@@ -384,10 +384,10 @@ async function answerTrainingPrompt(message, buttonMatcherFn, fallbackText, labe
     if (!clicked && fallbackText !== null && fallbackText !== undefined) {
         try {
             await message.channel.send(String(fallbackText));
-            notifyUi(`[*] Training (${labelInfo}) dijawab via teks: ${fallbackText}`, 4);
-            pushFeedLine(`[Training ${labelInfo}] Jawab teks: ${fallbackText}`);
+            notifyUi(`[*] Training (${labelInfo}) answered via text: ${fallbackText}`, 4);
+            pushFeedLine(`[Training ${labelInfo}] Sent text: ${fallbackText}`);
         } catch (err) {
-            notifyUi(`[E] Gagal jawab training: ${err.message}`, 5);
+            notifyUi(`[E] Failed to answer training: ${err.message}`, 5);
         }
     }
 
@@ -396,7 +396,7 @@ async function answerTrainingPrompt(message, buttonMatcherFn, fallbackText, labe
 }
 
 /**
- * Menyelesaikan 5 jenis pertanyaan 'rpg training' secara otomatis
+ * Automatically solves all 5 'rpg training' mini-game types
  */
 async function handleTrainingQuestion(message, content) {
     const lower = content.toLowerCase();
@@ -547,7 +547,7 @@ async function handleTrainingQuestion(message, content) {
 }
 
 /**
- * Mencari tombol aktif pada pesan Epic Event atau Arena
+ * Finds an active (non-disabled) button on an Epic Event, Arena, or Miniboss message
  */
 function findActiveJoinButton(message, preferredKeyword = null) {
     if (!message.components || message.components.length === 0) return null;
@@ -570,8 +570,8 @@ function findActiveJoinButton(message, preferredKeyword = null) {
 }
 
 /**
- * Helper bersama untuk Auto-Join Epic Event / Arena lengkap dengan jeda manusiawi & Auto-Retry
- * jika Discord membalas "The application did not respond".
+ * Shared helper for Auto-Join (Events / Arena / Miniboss) with human-like delay and retries
+ * when Discord returns "The application did not respond".
  */
 async function attemptJoinWithRetry(message, { kind, name, tag, buttonKeyword, joinCfg }) {
     const channelId = message.channel.id;
@@ -589,8 +589,8 @@ async function attemptJoinWithRetry(message, { kind, name, tag, buttonKeyword, j
         joinCfg.initialDelayMs?.min || 1000,
         joinCfg.initialDelayMs?.max || 2200
     );
-    notifyUi(`[*] ${tag} terdeteksi: ${name}! Klik dalam ${(initDelay / 1000).toFixed(1)}s...`, 5);
-    pushFeedLine(`[${tag}] Terdeteksi ${name}, mencoba join...`);
+    notifyUi(`[*] ${tag} detected: ${name}! Clicking in ${(initDelay / 1000).toFixed(1)}s...`, 5);
+    pushFeedLine(`[${tag}] Detected ${name}, attempting join...`);
 
     await sleep(initDelay);
 
@@ -602,7 +602,7 @@ async function attemptJoinWithRetry(message, { kind, name, tag, buttonKeyword, j
         const latestMsg = message.channel?.messages?.cache?.get(message.id) || message;
         const btnNow = findActiveJoinButton(latestMsg, buttonKeyword);
         if (!btnNow) {
-            pushFeedLine(`[${tag}] Tombol ${name} sudah ditutup/selesai.`);
+            pushFeedLine(`[${tag}] ${name} button already closed/ended.`);
             return;
         }
 
@@ -612,8 +612,8 @@ async function attemptJoinWithRetry(message, { kind, name, tag, buttonKeyword, j
                 joinEntry.joined = true;
                 if (state.stats[kind] !== undefined) state.stats[kind]++;
                 if (tui) tui.render();
-                notifyUi(`[*] Berhasil klik tombol ${name}!`, 5);
-                pushFeedLine(`[${tag}] Klik tombol ${btnNow.label || name} berhasil.`);
+                notifyUi(`[*] Clicked ${name} button!`, 5);
+                pushFeedLine(`[${tag}] Clicked ${btnNow.label || name} successfully.`);
             }
             return;
         } catch (err) {
@@ -625,16 +625,16 @@ async function attemptJoinWithRetry(message, { kind, name, tag, buttonKeyword, j
                     joinCfg.retryDelayMs?.max || 2500
                 );
                 notifyUi(
-                    `[!] Klik ${tag} gagal (App didn't respond), retry ${attempt}/${maxRetries}...`,
+                    `[!] ${tag} click failed (App didn't respond), retry ${attempt}/${maxRetries}...`,
                     4
                 );
                 pushFeedLine(
-                    `[${tag}] App didn't respond, mencoba klik ulang (${attempt}/${maxRetries})...`
+                    `[${tag}] App didn't respond, retrying click (${attempt}/${maxRetries})...`
                 );
                 await sleep(retryWait);
             } else {
-                notifyUi(`[E] Gagal join ${name} setelah ${maxRetries}x klik.`, 5);
-                pushFeedLine(`[${tag}] Gagal klik ${name}: ${err.message}`);
+                notifyUi(`[E] Failed to join ${name} after ${maxRetries} attempts.`, 5);
+                pushFeedLine(`[${tag}] Failed clicking ${name}: ${err.message}`);
             }
         }
     }
@@ -647,7 +647,7 @@ function getOwnUsernamesLower() {
 }
 
 /**
- * Menangani pesan di channel pantauan Epic Events dan Arena (lintas server/channel)
+ * Handles monitored messages for Epic Events, Arena, and Miniboss across servers/channels
  */
 async function handleMonitoredChannelMessage(
     message,
@@ -674,7 +674,7 @@ async function handleMonitoredChannelMessage(
     }
     const combinedLower = `${lowerContent}\n${embedText.toLowerCase()}`;
 
-    // 1. Deteksi konfirmasi hidden/ephemeral ("Successfully joined!" / "already joined" / penuh)
+    // 1. Detect hidden/ephemeral confirmation ("Successfully joined!" / "already joined" / full)
     if (
         combinedLower.includes('successfully joined') ||
         combinedLower.includes('already joined')
@@ -686,7 +686,7 @@ async function handleMonitoredChannelMessage(
             if (tui) tui.render();
         }
         const tag = pending?.tag || (allowArena && !allowEvents ? 'Arena/MB' : 'Event');
-        notifyUi(`[*] Konfirmasi Discord: Successfully joined (${tag})!`, 5);
+        notifyUi(`[*] Discord confirmation: Successfully joined (${tag})!`, 5);
         pushFeedLine(`[${tag}] ✅ Successfully joined! (${pending?.name || tag})`);
         return;
     }
@@ -699,15 +699,15 @@ async function handleMonitoredChannelMessage(
         const pending = state.pendingJoinByChannel.get(channelId);
         if (pending) pending.joined = true;
         const tag = pending?.tag || 'Monitor';
-        notifyUi(`[!] ${tag}: penuh atau sudah berakhir.`, 4);
-        pushFeedLine(`[${tag}] Penuh / sudah selesai, batal join.`);
+        notifyUi(`[!] ${tag}: full or already ended.`, 4);
+        pushFeedLine(`[${tag}] Full / already ended, skipped join.`);
         return;
     }
 
-    // 2. Deteksi hasil akhir Event / Arena / Miniboss
+    // 2. Detect Event / Arena / Miniboss rewards
     const ownNames = getOwnUsernamesLower();
     if (!state.handledEventRewards.has(message.id)) {
-        // 2a. Hasil Epic Event ("Players: ... Everyone got ...")
+        // 2a. Epic Event result ("Players: ... Everyone got ...")
         if (combinedLower.includes('players:') && combinedLower.includes('everyone got')) {
             if (ownNames.some((n) => combinedLower.includes(n))) {
                 state.handledEventRewards.add(message.id);
@@ -716,13 +716,13 @@ async function handleMonitoredChannelMessage(
                     ? rewardMatch[1].replace(/\*\*/g, '').trim()
                     : 'Event Reward';
                 state.profile.lastDrop = `Event: ${rewardStr}`;
-                notifyUi(`[!] Hadiah Event didapat: ${rewardStr}!`, 7);
-                pushFeedLine(`🎉 [Event Reward] Kamu dapat: ${rewardStr}`);
+                notifyUi(`[!] Event reward received: ${rewardStr}!`, 7);
+                pushFeedLine(`🎉 [Event Reward] You got: ${rewardStr}`);
             }
             return;
         }
 
-        // 2b. Hasil Arena ("Ranking\n1. username (+23 🍪) - kills: ...")
+        // 2b. Arena result ("Ranking\n1. username (+23 🍪) - kills: ...")
         if (
             combinedLower.includes('players:') &&
             combinedLower.includes('ranking') &&
@@ -744,13 +744,13 @@ async function handleMonitoredChannelMessage(
                 }
                 const rewardLabel = cookiesWon ? `+${cookiesWon} cookies` : 'Arena cookies';
                 state.profile.lastDrop = `Arena: ${rewardLabel}`;
-                notifyUi(`[!] Arena selesai! Kamu dapat ${rewardLabel}!`, 6);
-                pushFeedLine(`🏟️ [Arena Result] Kamu dapat ${rewardLabel}!`);
+                notifyUi(`[!] Arena finished! You earned ${rewardLabel}!`, 6);
+                pushFeedLine(`🏟️ [Arena Result] You earned ${rewardLabel}!`);
             }
             return;
         }
 
-        // 2c. Hasil Miniboss ("... defeated ... helper(s) got X coins")
+        // 2c. Miniboss result ("... defeated ... helper(s) got X coins")
         if (
             combinedLower.includes('defeated') &&
             (combinedLower.includes('helper') || combinedLower.includes('players:')) &&
@@ -760,16 +760,16 @@ async function handleMonitoredChannelMessage(
             const mbCoinsMatch = combinedLower.match(/(?:helper|got|earned)[^\d\n]*([\d,]+)\s*coins/i);
             const rewardLabel = mbCoinsMatch ? `+${mbCoinsMatch[1]} coins` : 'Miniboss Win';
             state.profile.lastDrop = `Miniboss: ${rewardLabel}`;
-            notifyUi(`[!] Miniboss berhasil dikalahkan! (${rewardLabel})`, 6);
-            pushFeedLine(`🗡️ [Miniboss Result] Menang! (${rewardLabel})`);
+            notifyUi(`[!] Miniboss defeated! (${rewardLabel})`, 6);
+            pushFeedLine(`🗡️ [Miniboss Result] Victory! (${rewardLabel})`);
             return;
         }
     }
 
-    // 3. Cegah pemrosesan ganda pada pesan tombol yang sama
+    // 3. Prevent duplicate processing on the same button message
     if (state.handledEventMessages.has(message.id)) return;
 
-    // 4. Deteksi kemunculan Miniboss ("klonixg — miniboss" / "Type fight to help and get a reward!")
+    // 4. Detect Miniboss spawn ("<user> — miniboss" / "Type fight to help and get a reward!")
     if (
         allowMiniboss &&
         combinedLower.includes('miniboss') &&
@@ -801,7 +801,7 @@ async function handleMonitoredChannelMessage(
         return;
     }
 
-    // 5. Deteksi kemunculan Arena Event ("started an arena event!" / "to join the arena!")
+    // 5. Detect Arena Event ("started an arena event!" / "to join the arena!")
     if (
         allowArena &&
         (combinedLower.includes('started an arena event') ||
@@ -826,7 +826,7 @@ async function handleMonitoredChannelMessage(
         return;
     }
 
-    // 6. Deteksi kemunculan 6 jenis Epic Event
+    // 6. Detect all 6 Epic Event types
     if (allowEvents) {
         const eventTypes = [
             { match: 'an epic tree has just grown', name: 'Epic Tree (CUT)' },
@@ -877,7 +877,7 @@ function getChannelMonitorFlags(channelId) {
     };
 }
 
-// Pantau juga messageUpdate karena event, arena & miniboss sering muncul/selesai via edit pesan
+// Also watch messageUpdate because events, arena & miniboss often appear/end via message edits
 client.on('messageUpdate', async (_oldMsg, newMsg) => {
     if (state.isStopped || !newMsg.channel?.id) return;
     const flags = getChannelMonitorFlags(newMsg.channel.id);
@@ -901,7 +901,7 @@ client.on('messageCreate', async (message) => {
     if (message.channel.id !== config.channelId) return;
     if (message.author.id !== config.epicRpgBotId) return;
 
-    // Jika di channel pribadi muncul random event, arena, atau miniboss, ikut tangani sesuai toggle
+    // If a random event, arena, or miniboss spawns in the main channel, handle it per toggles
     if (config.events?.autoJoin || config.arena?.autoJoin || config.miniboss?.autoJoin) {
         handleMonitoredChannelMessage(message, {
             allowEvents: !!config.events?.autoJoin,
@@ -929,7 +929,7 @@ client.on('messageCreate', async (message) => {
     }
     const combinedLower = `${lowerContent} ${embedText.toLowerCase()}`;
 
-    // 1. Deteksi EPIC GUARD (wajib berhenti & minta user verifikasi manual di Discord)
+    // 1. EPIC GUARD detection (must stop and prompt user to verify manually in Discord)
     if (
         combinedLower.includes('epic guard') ||
         combinedLower.includes(':police_car:') ||
@@ -940,20 +940,20 @@ client.on('messageCreate', async (message) => {
         return;
     }
 
-    // 2. Deteksi & Jawab Otomatis Pertanyaan "rpg training" (5 lokasi)
+    // 2. Detect & auto-solve "rpg training" questions (all 5 locations)
     if (lowerContent.includes('is training in the')) {
         pushFeedLine(content.split('\n')[0]);
         await handleTrainingQuestion(message, content);
         return;
     }
 
-    // 3. Deteksi Embed "rpg cd" (contoh: "<username> — cooldowns")
+    // 3. Detect "rpg cd" embed (e.g. "<username> — cooldowns")
     if (embedTitle.toLowerCase().includes('cooldowns') && message.embeds[0]) {
         syncFromCooldownEmbed(message.embeds[0]);
         return;
     }
 
-    // 4. Deteksi Embed "rpg inventory" (untuk membaca jumlah Ruby agar Mine Training akurat)
+    // 4. Detect "rpg inventory" embed (reads Ruby count for Mine Training)
     if (embedTitle.toLowerCase().includes('inventory') && message.embeds[0]?.fields) {
         for (const f of message.embeds[0].fields) {
             const val = f.value || '';
@@ -967,38 +967,38 @@ client.on('messageCreate', async (message) => {
                 state.profile.rubies = 0;
             }
         }
-        notifyUi(`[*] Inventory diperbarui (Ruby: ${state.profile.rubies}).`, 3);
+        notifyUi(`[*] Inventory updated (Ruby: ${state.profile.rubies}).`, 3);
     }
 
-    // 5. Sinkronisasi Cooldown tunggal jika command dikirim saat masih cooldown ("wait at least ...")
+    // 5. Sync single command cooldown if sent while on cooldown ("wait at least ...")
     if (combinedLower.includes('wait at least')) {
         const remainingMs = parseDurationMs(embedText || content);
         if (remainingMs) {
             if (combinedLower.includes('hunting')) {
-                notifyUi('[*] Hunt masih cooldown, jadwal disinkronkan ulang.', 4);
-                pushFeedLine(`Cooldown Hunt tersisa: ${Math.ceil(remainingMs / 1000)}s`);
+                notifyUi('[*] Hunt still on cooldown, timer resynced.', 4);
+                pushFeedLine(`Hunt cooldown remaining: ${Math.ceil(remainingMs / 1000)}s`);
                 scheduleNext('hunt', remainingMs);
             } else if (combinedLower.includes('adventuring')) {
-                notifyUi('[*] Adventure masih cooldown, jadwal disinkronkan ulang.', 4);
-                pushFeedLine(`Cooldown Adventure tersisa: ${Math.ceil(remainingMs / 60000)}m`);
+                notifyUi('[*] Adventure still on cooldown, timer resynced.', 4);
+                pushFeedLine(`Adventure cooldown remaining: ${Math.ceil(remainingMs / 60000)}m`);
                 scheduleNext('adventure', remainingMs);
             } else if (combinedLower.includes('training')) {
-                notifyUi('[*] Training masih cooldown, jadwal disinkronkan ulang.', 4);
+                notifyUi('[*] Training still on cooldown, timer resynced.', 4);
                 scheduleNext('training', remainingMs);
             } else if (combinedLower.includes('working')) {
-                notifyUi('[*] Work masih cooldown, jadwal disinkronkan ulang.', 4);
+                notifyUi('[*] Work still on cooldown, timer resynced.', 4);
                 scheduleNext('work', remainingMs);
             } else if (combinedLower.includes('farming')) {
-                notifyUi('[*] Farm masih cooldown, jadwal disinkronkan ulang.', 4);
+                notifyUi('[*] Farm still on cooldown, timer resynced.', 4);
                 scheduleNext('farm', remainingMs);
             } else if (combinedLower.includes('daily')) {
-                notifyUi('[*] Daily masih cooldown, jadwal disinkronkan ulang.', 4);
+                notifyUi('[*] Daily still on cooldown, timer resynced.', 4);
                 scheduleNext('daily', remainingMs);
             } else if (combinedLower.includes('weekly')) {
                 state.passiveCdAt.weekly = Date.now() + remainingMs;
             } else if (combinedLower.includes('lootbox')) {
-                notifyUi('[*] Lootbox masih cooldown, jadwal disinkronkan ulang.', 4);
-                pushFeedLine(`Cooldown Lootbox tersisa: ${Math.ceil(remainingMs / 60000)}m`);
+                notifyUi('[*] Lootbox still on cooldown, timer resynced.', 4);
+                pushFeedLine(`Lootbox cooldown remaining: ${Math.ceil(remainingMs / 60000)}m`);
                 scheduleNext('lootbox', remainingMs);
             } else if (combinedLower.includes('card')) {
                 state.passiveCdAt.card_hand = Date.now() + remainingMs;
@@ -1013,14 +1013,14 @@ client.on('messageCreate', async (message) => {
             } else if (combinedLower.includes('dungeon') || combinedLower.includes('miniboss')) {
                 state.passiveCdAt.dungeon = Date.now() + remainingMs;
             } else if (state.lastSentCmd === 'rpg buy ed lb') {
-                notifyUi('[*] Lootbox masih cooldown, jadwal disinkronkan ulang.', 4);
+                notifyUi('[*] Lootbox still on cooldown, timer resynced.', 4);
                 scheduleNext('lootbox', remainingMs);
             }
         }
         return;
     }
 
-    // 6. Parsing Profile Embed (saat startup, level up, atau user tekan 'u' / rpg p)
+    // 6. Parse Profile embed (on startup, level up, or user pressing 'u' / rpg p)
     if (embedTitle.toLowerCase().includes('profile') && message.embeds[0]?.fields) {
         for (const f of message.embeds[0].fields) {
             const fname = (f.name || '').toLowerCase();
@@ -1092,10 +1092,10 @@ client.on('messageCreate', async (message) => {
                 }
             }
         }
-        notifyUi('[*] Data Profile (Level, XP, Money, Equipment) diperbarui!', 3);
+        notifyUi('[*] Profile data (Level, XP, Money, Equipment) updated!', 3);
     }
 
-    // 7. Tampilkan pesan hasil Hunt / Adventure / Training / Work di panel tengah
+    // 7. Push Hunt / Adventure / Training / Work result lines to center activity feed
     if (content) {
         const lines = content.split('\n').filter((l) => l.trim().length > 0);
         for (const l of lines) {
@@ -1119,7 +1119,7 @@ client.on('messageCreate', async (message) => {
             }
         }
 
-        // Jika XP sudah melewati Max XP atau ada pesan level up, otomatis cek 'rpg p' untuk update level & batas XP baru
+        // If XP exceeded Max XP or leveled up, refresh 'rpg p' to update Level & new XP cap
         if (
             lowerContent.includes('leveled up') ||
             lowerContent.includes('+1 level') ||
@@ -1136,7 +1136,7 @@ client.on('messageCreate', async (message) => {
             state.profile.rubies += parseInt(rubyGainMatch[1], 10) || 0;
         }
 
-        // Parse semua jenis item drop ("<username> got 2 pumpkins", "got 1 wooden log", "got an edgy lootbox")
+        // Parse item drops ("<username> got 2 pumpkins", "got 1 wooden log", "got an edgy lootbox")
         const dropMatch = content.match(/\bgot\s+([^\n!]+)/i);
         if (dropMatch && !lowerContent.includes('everyone got')) {
             const cleanDrop = dropMatch[1]
@@ -1146,14 +1146,14 @@ client.on('messageCreate', async (message) => {
                 .trim();
             if (cleanDrop) {
                 state.profile.lastDrop = cleanDrop;
-                notifyUi(`[!] Dapat item: ${cleanDrop}!`, 4);
+                notifyUi(`[!] Item drop: ${cleanDrop}!`, 4);
             }
         }
     } else if (embedTitle) {
         pushFeedLine(`[Embed] ${embedTitle}`);
     }
 
-    // 7b. Deteksi hasil pembelian EDGY lootbox ('rpg buy ed lb')
+    // 7b. Detect EDGY lootbox purchase result ('rpg buy ed lb')
     if (
         combinedLower.includes('edgy lootbox') &&
         (combinedLower.includes('bought') || combinedLower.includes('purchased'))
@@ -1162,9 +1162,9 @@ client.on('messageCreate', async (message) => {
             state.profile.coins = Math.max(0, state.profile.coins - 420666);
         }
         state.profile.lastDrop = 'EDGY lootbox (Shop)';
-        notifyUi('[*] Berhasil membeli EDGY lootbox (-420.666 coins)!', 5);
+        notifyUi('[*] Purchased EDGY lootbox (-420,666 coins)!', 5);
         if (!content) {
-            pushFeedLine('[Shop] Berhasil beli 1 EDGY lootbox (-420,666 coins)');
+            pushFeedLine('[Shop] Bought 1 EDGY lootbox (-420,666 coins)');
         }
     } else if (
         (combinedLower.includes("don't have enough coins") ||
@@ -1172,11 +1172,11 @@ client.on('messageCreate', async (message) => {
         (combinedLower.includes('lootbox') || state.lastSentCmd === 'rpg buy ed lb')
     ) {
         if (state.stats.lootbox > 0) state.stats.lootbox--;
-        notifyUi('[!] Koin kurang untuk beli EDGY lootbox (butuh 420.666 coins)!', 6);
-        pushFeedLine('[Shop] Koin tidak cukup untuk beli EDGY lootbox (420,666 coins).');
+        notifyUi('[!] Not enough coins to buy EDGY lootbox (need 420,666 coins)!', 6);
+        pushFeedLine('[Shop] Not enough coins for EDGY lootbox (420,666 coins).');
     }
 
-    // 8. Cek HP & Auto-Heal
+    // 8. Check HP & Auto-Heal
     const hpMatch =
         content.match(/remaining HP is \*\*(\d+)\/(\d+)\*\*/i) ||
         content.match(/remaining HP is (\d+)\/(\d+)/i);
@@ -1188,43 +1188,43 @@ client.on('messageCreate', async (message) => {
         state.profile.hpText = `${currentHp}/${maxHp} (${hpPercent}%)`;
 
         if (config.safety.autoHeal && hpPercent <= config.safety.healBelowHpPercent) {
-            notifyUi(`[!] HP ${hpPercent}% <= ${config.safety.healBelowHpPercent}%, Auto-Heal aktif!`, 5);
+            notifyUi(`[!] HP ${hpPercent}% <= ${config.safety.healBelowHpPercent}%, Auto-Heal triggered!`, 5);
             enqueueCommand('rpg heal', 'heals', true);
         }
     } else if (lowerContent.includes('lost fighting') || lowerContent.includes('died')) {
         state.profile.hpText = '0 (DIED!)';
-        notifyUi('[!] Karakter kalah bertarung! Mengirim rpg heal...', 8);
+        notifyUi('[!] Character died in battle! Sending rpg heal...', 8);
         if (config.safety.autoHeal) {
             enqueueCommand('rpg heal', 'heals', true);
         }
     } else if (lowerContent.includes('restored') && lowerContent.includes('life')) {
         state.profile.hpText = 'FULL (Healed)';
-        notifyUi('[*] HP berhasil dipulihkan!', 3);
+        notifyUi('[*] HP restored!', 3);
     }
 
-    // 9. Auto-Buy Life Potion jika habis
+    // 9. Auto-Buy Life Potion when out of potions
     if (
         config.safety.autoHeal &&
         config.safety.autoBuyLifePotion &&
         lowerContent.includes("don't have a life potion")
     ) {
         const amt = config.safety.buyLifePotionAmount || 5;
-        notifyUi(`[*] Life potion habis! Membeli ${amt} potion...`, 5);
+        notifyUi(`[*] Out of life potions! Buying ${amt} potions...`, 5);
         enqueueCommand(`rpg buy life potion ${amt}`, 'buy_potion', true);
         enqueueCommand('rpg heal', 'heals', false);
     }
 });
 
-// Handler interaktif untuk tombol keyboard di Live TUI
+// Interactive keyboard handlers for Live TUI
 const tuiActions = {
     onTogglePause() {
         state.isPaused = !state.isPaused;
         if (state.isPaused) {
-            notifyUi('[!] Bot PAUSED (dijeda). Tekan "p" lagi untuk lanjut.', 5);
-            pushFeedLine('--- Bot Dijeda (PAUSED) ---');
+            notifyUi('[!] Bot PAUSED. Press "p" again to resume.', 5);
+            pushFeedLine('--- Bot Paused (PAUSED) ---');
         } else {
-            notifyUi('[*] Bot RESUMED (dilanjutkan).', 4);
-            pushFeedLine('--- Bot Dilanjutkan (RUNNING) ---');
+            notifyUi('[*] Bot RESUMED.', 4);
+            pushFeedLine('--- Bot Resumed (RUNNING) ---');
         }
     },
     onToggleFeature(key) {
@@ -1232,7 +1232,7 @@ const tuiActions = {
         if (!cmdCfg) return;
         cmdCfg.enabled = !cmdCfg.enabled;
         const statusStr = cmdCfg.enabled ? 'ON' : 'OFF';
-        notifyUi(`[*] Auto ${key.toUpperCase()} diubah ke: ${statusStr}`, 4);
+        notifyUi(`[*] Auto ${key.toUpperCase()} set to: ${statusStr}`, 4);
         pushFeedLine(`[Config] Auto ${key.toUpperCase()} -> ${statusStr}`);
 
         if (cmdCfg.enabled) {
@@ -1258,35 +1258,35 @@ const tuiActions = {
         const idx = list.findIndex((item) => item.cmd === currentCmd);
         const nextItem = list[(idx + 1) % list.length];
         config.commands.work.cmd = nextItem.cmd;
-        notifyUi(`[*] Work diganti ke: ${nextItem.label} ("${nextItem.cmd}")`, 5);
-        pushFeedLine(`[Work] Jenis Work diubah ke: ${nextItem.label}`);
+        notifyUi(`[*] Work switched to: ${nextItem.label} ("${nextItem.cmd}")`, 5);
+        pushFeedLine(`[Work] Work command switched to: ${nextItem.label}`);
     },
     onToggleEvents() {
         config.events.autoJoin = !config.events.autoJoin;
         const statusStr = config.events.autoJoin ? 'ON' : 'OFF';
-        notifyUi(`[*] Auto-Join Epic Events diubah ke: ${statusStr}`, 4);
+        notifyUi(`[*] Auto-Join Epic Events set to: ${statusStr}`, 4);
         pushFeedLine(`[Config] Auto-Join Events -> ${statusStr}`);
     },
     onToggleArena() {
         config.arena.autoJoin = !config.arena.autoJoin;
         const statusStr = config.arena.autoJoin ? 'ON' : 'OFF';
-        notifyUi(`[*] Auto-Join Arena diubah ke: ${statusStr}`, 4);
+        notifyUi(`[*] Auto-Join Arena set to: ${statusStr}`, 4);
         pushFeedLine(`[Config] Auto-Join Arena -> ${statusStr}`);
     },
     onToggleMiniboss() {
         config.miniboss.autoJoin = !config.miniboss.autoJoin;
         const statusStr = config.miniboss.autoJoin ? 'ON' : 'OFF';
-        notifyUi(`[*] Auto-Join Miniboss diubah ke: ${statusStr}`, 4);
+        notifyUi(`[*] Auto-Join Miniboss set to: ${statusStr}`, 4);
         pushFeedLine(`[Config] Auto-Join Miniboss -> ${statusStr}`);
     },
     onToggleHeal() {
         config.safety.autoHeal = !config.safety.autoHeal;
         const statusStr = config.safety.autoHeal ? 'ON' : 'OFF';
-        notifyUi(`[*] Auto-Heal diubah ke: ${statusStr}`, 4);
+        notifyUi(`[*] Auto-Heal set to: ${statusStr}`, 4);
         pushFeedLine(`[Config] Auto-Heal -> ${statusStr}`);
     },
     onManualCommand(cmd, label) {
-        notifyUi(`[*] Menjadwalkan manual command: "${cmd}"`, 3);
+        notifyUi(`[*] Queuing manual command: "${cmd}"`, 3);
         if (cmd === 'rpg p') {
             enqueueCommand('rpg p', 'profile', false, true);
             enqueueCommand('rpg i', 'inv', false, true);
@@ -1300,7 +1300,7 @@ const tuiActions = {
             if (t) clearTimeout(t);
         });
         if (tui) {
-            tui.stop(chalk.yellow('\n[!] Bot dihentikan oleh pengguna (Quit).\n'));
+            tui.stop(chalk.yellow('\n[!] Bot stopped by user (Quit).\n'));
         }
         client.destroy();
         process.exit(0);
@@ -1313,20 +1313,20 @@ client.on('ready', async () => {
     try {
         state.targetChannel = await client.channels.fetch(config.channelId);
         state.profile.channelName = `#${state.targetChannel.name || config.channelId}`;
-        notifyUi(`[*] Terhubung sebagai ${client.user.tag} di ${state.profile.channelName}`, 5);
-        pushFeedLine(`Login berhasil: ${client.user.tag} (${state.profile.channelName})`);
+        notifyUi(`[*] Connected as ${client.user.tag} in ${state.profile.channelName}`, 5);
+        pushFeedLine(`Logged in: ${client.user.tag} (${state.profile.channelName})`);
     } catch (err) {
         if (tui) {
             tui.stop(
                 chalk.red(
-                    `\n[E] Gagal mengakses CHANNEL_ID (${config.channelId}): ${err.message}\n`
+                    `\n[E] Failed to access CHANNEL_ID (${config.channelId}): ${err.message}\n`
                 )
             );
         }
         process.exit(1);
     }
 
-    // Pre-fetch channel event, arena, & miniboss (dideduplikasi per channelId)
+    // Pre-fetch event, arena, and miniboss channels (deduplicated per channelId)
     const monitorRolesByChannel = new Map();
     const addRole = (ids, role) => {
         for (const chId of ids || []) {
@@ -1341,20 +1341,20 @@ client.on('ready', async () => {
     for (const [chId, roles] of monitorRolesByChannel.entries()) {
         try {
             const chObj = await client.channels.fetch(chId);
-            pushFeedLine(`[Monitor ${roles.join('+')}] Memantau #${chObj.name || chId}`);
+            pushFeedLine(`[Monitor ${roles.join('+')}] Watching #${chObj.name || chId}`);
         } catch (err) {
-            pushFeedLine(`[Monitor ${roles.join('+')}] Gagal akses channel ${chId}: ${err.message}`);
+            pushFeedLine(`[Monitor ${roles.join('+')}] Failed to access channel ${chId}: ${err.message}`);
         }
     }
 
-    // Cek profile & inventory sekali di awal (untuk menampilkan Level, XP X/Y, Money, Equipment, dan Ruby) lalu cek Cooldown
+    // Fetch profile & inventory once at startup (Level, XP, Money, Equipment, Ruby) then sync cooldowns
     enqueueCommand('rpg p', 'profile');
     enqueueCommand('rpg i', 'inv');
     if (config.safety.syncCooldownOnStart) {
         enqueueCommand('rpg cd', 'cd');
     }
 
-    // Jadwalkan command yang aktif di config.commands
+    // Schedule enabled commands from config.commands
     for (const [key, cmdCfg] of Object.entries(config.commands)) {
         if (cmdCfg.enabled && cmdCfg.cmd) {
             if (!config.safety.syncCooldownOnStart) {
@@ -1369,7 +1369,7 @@ function startBot() {
     if (!config.token || config.token.trim() === '') {
         console.log(
             chalk.red.bold(
-                '\n[E] TOKEN belum diisi! Silakan buka file .env dan isi TOKEN Discord kamu.\n'
+                '\n[E] TOKEN is missing! Please open your .env file and set your Discord TOKEN.\n'
             )
         );
         process.exit(1);
@@ -1377,7 +1377,7 @@ function startBot() {
     if (!config.channelId || config.channelId.trim() === '') {
         console.log(
             chalk.red.bold(
-                '\n[E] CHANNEL_ID belum diisi! Silakan buka file .env dan isi CHANNEL_ID tempat bermain.\n'
+                '\n[E] CHANNEL_ID is missing! Please open your .env file and set your target CHANNEL_ID.\n'
             )
         );
         process.exit(1);
@@ -1385,13 +1385,13 @@ function startBot() {
 
     tui = new LiveTUI(state, config, tuiActions);
     tui.start();
-    tui.notify('[*] Menghubungkan ke Discord Gateway...', 4);
+    tui.notify('[*] Connecting to Discord Gateway...', 4);
 
     client.login(config.token).catch((err) => {
         if (tui) {
             tui.stop(
                 chalk.red.bold(
-                    `\n[E] Gagal login ke Discord. Cek kembali TOKEN di file .env!\nDetail: ${err.message}\n`
+                    `\n[E] Failed to log in to Discord. Check your TOKEN in .env!\nDetails: ${err.message}\n`
                 )
             );
         }
@@ -1399,7 +1399,7 @@ function startBot() {
     });
 }
 
-// Anti-Crash: tangkap unhandledRejection (misal HTTP 400 / code 50035 dari clickButton saat event baru saja tutup)
+// Crash protection: catch unhandledRejection (e.g., HTTP 400 / code 50035 when an event button closes right before click)
 process.on('unhandledRejection', (reason) => {
     const failedMsgId = reason?.requestData?.json?.message_id;
     const isExpiredInteraction =
@@ -1414,18 +1414,18 @@ process.on('unhandledRejection', (reason) => {
     }
 
     if (isExpiredInteraction) {
-        notifyUi('[!] Tombol event sudah ditutup sebelum diklik (expired).', 4);
-        pushFeedLine('[Event] Tombol sudah ditutup/kadaluarsa sebelum diklik.');
+        notifyUi('[!] Event button closed before click (expired).', 4);
+        pushFeedLine('[Event] Button closed/expired before click.');
         return;
     }
 
     const msg = reason?.message || String(reason);
-    notifyUi(`[!] Peringatan async: ${msg}`, 4);
+    notifyUi(`[!] Async warning: ${msg}`, 4);
     pushFeedLine(`[WARN] ${msg}`);
 });
 
 process.on('uncaughtException', (err) => {
-    notifyUi(`[!] Peringatan sistem: ${err.message}`, 5);
+    notifyUi(`[!] System error: ${err.message}`, 5);
     pushFeedLine(`[ERR] ${err.message}`);
 });
 

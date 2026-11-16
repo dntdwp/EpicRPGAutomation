@@ -1,69 +1,71 @@
 # ⚔️ EPIC RPG Discord Automation (Live CLI Dashboard Edition)
 
-Project ini menggabungkan fitur terbaik dari 4 repositori referensi (`Frsxk/Epic-selfbot`, `Const-DC/EPIC-RPG-GRINDING-SELF-BOT-FOR-DISCORD`, `Mid0aria/EpicRPGFarmBot`, dan `MurphyPone/epic-rpg-huntr`) dengan tampilan **CLI Live Status (TUI)** bergaya `Autovirtualfisher/autofishbot`.
+An updated, lightweight Discord automation tool for **EPIC RPG** featuring a **Live CLI Status Dashboard (TUI)** inspired by `Autovirtualfisher/autofishbot` and combining ideas from `Frsxk/Epic-selfbot`, `Const-DC/EPIC-RPG-GRINDING-SELF-BOT-FOR-DISCORD`, `Mid0aria/EpicRPGFarmBot`, and `MurphyPone/epic-rpg-huntr`.
 
-- **Tidak Perlu Fokus Window Discord:** Berjalan langsung melalui *Discord Gateway/API* di latar belakang—aplikasi Discord bisa di-*minimize* atau ditutup.
-- **Verifikasi Ukuran Terminal Real-Time:** Bagian kanan atas CLI menampilkan ukuran terminal saat ini dan mengecek apakah sudah tepat sesuai ukuran ideal (harus pas, bukan kurang maupun berlebih).
-- **Auto Sync dari `rpg cd`:** Saat dinyalakan (atau saat menekan tombol `c`), bot otomatis membaca embed `cooldowns` (`<username> — cooldowns`) dan menyinkronkan semua hitung mundur detik demi detik.
-- **Mendukung Semua 16 Working Commands:** Bisa mengganti jenis *work* (`chop`, `fish`, `pickup`, `mine`, `axe`, `net`, `ladder`, `pickaxe`, `bowsaw`, `boat`, `tractor`, `drill`, `chainsaw`, `bigboat`, `greenhouse`, `dynamite`) langsung lewat tombol `k` di terminal.
+- **Headless / Background Friendly:** Connects directly through the Discord Gateway/API—the Discord client does not need window focus and can stay minimized or closed.
+- **Real-Time Terminal Size Check:** The top-right corner checks your terminal dimensions in real time and verifies an exact layout fit.
+- **Auto Sync from `rpg cd`:** On startup (or whenever pressing `c`), automatically parses the `cooldowns` embed (`<username> — cooldowns`) and synchronizes every countdown timer to the second.
+- **Supports All 16 Working Commands:** Cycle between all 16 work commands (`chop`, `fish`, `pickup`, `mine`, `axe`, `net`, `ladder`, `pickaxe`, `bowsaw`, `boat`, `tractor`, `drill`, `chainsaw`, `bigboat`, `greenhouse`, `dynamite`) live using the `k` key.
+- **Safety-First Guard Detection:** Immediately halts all queues and alerts you via terminal bell and desktop notification if EPIC GUARD is detected so you can verify manually in Discord.
 
 ---
 
-## 🖥️ Pintasan Keyboard (*Keybinds*) di Live CLI
+## 🖥️ Live CLI Keybinds
 
-| Tombol | Fungsi |
+| Key | Action |
 | :---: | :--- |
-| `p` | **Pause / Resume** otomatisasi |
+| `p` | **Pause / Resume** automation |
 | `h` | **Toggle Auto-Hunt** (`ON` / `OFF`) |
 | `a` | **Toggle Auto-Adventure** (`ON` / `OFF`) |
+| `t` | **Toggle Auto-Training** (`ON` / `OFF`) |
 | `w` | **Toggle Auto-Work** (`ON` / `OFF`) |
-| `k` | **Ganti Jenis Work** (berputar melalui 16 *Working Commands* sesuai Area) |
+| `k` | **Cycle Work Type** (rotates through all 16 working commands) |
 | `f` | **Toggle Auto-Farm** (`rpg farm` — `ON` / `OFF`) |
-| `l` | **Toggle Auto-Lootbox** (`rpg buy ed lb` tiap 3 jam — `ON` / `OFF`) |
-| `v` | **Toggle Auto-Event** (Auto-Join Epic Events lintas server — `ON` / `OFF`) |
-| `r` | **Toggle Auto-Arena** (Auto-Join Arena Event lintas server — `ON` / `OFF`) |
-| `m` | **Toggle Auto-Miniboss** (Auto-Join Miniboss `FIGHT` lintas server — `ON` / `OFF`) |
+| `l` | **Toggle Auto-Lootbox** (`rpg buy ed lb` every 3h — `ON` / `OFF`) |
+| `v` | **Toggle Auto-Event** (cross-server Epic Events auto-join — `ON` / `OFF`) |
+| `r` | **Toggle Auto-Arena** (cross-server Arena auto-join — `ON` / `OFF`) |
+| `m` | **Toggle Auto-Miniboss** (cross-server Miniboss `FIGHT` auto-join — `ON` / `OFF`) |
 | `e` | **Toggle Auto-Heal** (`ON` / `OFF`) |
-| `x` | Kirim `rpg heal` manual sekarang |
-| `u` | Cek Profile (`rpg p`) untuk memperbarui Level & HP di panel |
-| `c` | Kirim `rpg cd` untuk menyinkronkan ulang semua timer |
-| `d` | Klaim Daily (`rpg daily`) |
-| `Q` | **Quit / Keluar** (`Shift+Q` atau `Ctrl+C`) |
+| `x` | Send `rpg heal` manually right away |
+| `u` | Check Profile & Inventory (`rpg p` + `rpg i`) to update stats |
+| `c` | Send `rpg cd` to resync all cooldown timers |
+| `d` | Claim Daily (`rpg daily`) |
+| `Q` | **Quit** (`Shift+Q` or `Ctrl+C`) |
 
 ---
 
-## 🛠️ Daftar Lengkap 16 Working Commands (Cooldown Bersama: 5 Menit)
+## 🛠️ All 16 Working Commands (Shared 5-Minute Cooldown)
 
-Semua *working command* di bawah ini berbagi satu *cooldown* yang sama (`chop | fish | pickup | mine` = **5 menit**):
+All working commands below share the same 5-minute cooldown (`chop | fish | pickup | mine`):
 
-| Kategori | Tier 1 | Tier 2 | Tier 3 | Tier 4 |
+| Category | Tier 1 | Tier 2 | Tier 3 | Tier 4 |
 | :--- | :--- | :--- | :--- | :--- |
-| **🌲 Kayu (Wood)** | `rpg chop` (Area 1) | `rpg axe` (Area 3) | `rpg bowsaw` (Area 6) | `rpg chainsaw` (Area 9) |
-| **🐟 Ikan (Fish)** | `rpg fish` (Area 1) | `rpg net` (Area 3) | `rpg boat` (Area 6) | `rpg bigboat` (Area 9) |
-| **🍎 Buah (Fruit)** | `rpg pickup` (Area 3) | `rpg ladder` (Area 4) | `rpg tractor` (Area 8) | `rpg greenhouse` (Area 11) |
-| **⛏️ Tambang (Mine)** | `rpg mine` (Area 5) | `rpg pickaxe` (Area 6) | `rpg drill` (Area 10) | `rpg dynamite` (Area 12) |
+| **🌲 Wood** | `rpg chop` (Area 1) | `rpg axe` (Area 3) | `rpg bowsaw` (Area 6) | `rpg chainsaw` (Area 9) |
+| **🐟 Fish** | `rpg fish` (Area 1) | `rpg net` (Area 3) | `rpg boat` (Area 6) | `rpg bigboat` (Area 9) |
+| **🍎 Fruit** | `rpg pickup` (Area 3) | `rpg ladder` (Area 4) | `rpg tractor` (Area 8) | `rpg greenhouse` (Area 11) |
+| **⛏️ Mine** | `rpg mine` (Area 5) | `rpg pickaxe` (Area 6) | `rpg drill` (Area 10) | `rpg dynamite` (Area 12) |
 
 ---
 
-## 🚀 Cara Pakai
+## 🚀 Getting Started
 
-1. Install dependensi:
+1. Install dependencies:
    ```powershell
    npm install
    ```
-2. Salin **[.env.example](.env.example)** menjadi `.env` lalu isi kredensial & ID channel kamu:
+2. Copy **[.env.example](.env.example)** to `.env` and fill in your Discord token and channel IDs:
    ```powershell
    Copy-Item .env.example .env
    ```
    ```env
-   TOKEN=isi_token_akun_discord_kamu
-   CHANNEL_ID=isi_id_channel_tempat_main
-   EVENT_CHANNEL_IDS=opsional_id_channel_event
-   ARENA_CHANNEL_IDS=opsional_id_channel_arena
-   MINIBOSS_CHANNEL_IDS=opsional_id_channel_miniboss
+   TOKEN=your_discord_token_here
+   CHANNEL_ID=your_grinding_channel_id
+   EVENT_CHANNEL_IDS=optional_event_channel_ids
+   ARENA_CHANNEL_IDS=optional_arena_channel_ids
+   MINIBOSS_CHANNEL_IDS=optional_miniboss_channel_ids
    ```
-3. Atur preferensi awal (opsional) di **[config.js](config.js)**.
-4. Jalankan bot di terminal:
+3. Customize default feature toggles and safety thresholds (optional) in **[config.js](config.js)**.
+4. Start the bot:
    ```powershell
    npm start
    ```

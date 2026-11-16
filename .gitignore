@@ -1,7 +1,7 @@
 # Dependencies
 node_modules/
 
-# Environment variables & secrets (JANGAN pernah di-commit!)
+# Environment variables & secrets (NEVER commit!)
 .env
 .env.*
 !.env.example
@@ -11,7 +11,7 @@ node_modules/
 npm-debug.log*
 bot.log
 
-# OS & Editor files
+# OS & editor files
 .DS_Store
 Thumbs.db
 desktop.ini

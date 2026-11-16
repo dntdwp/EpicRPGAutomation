@@ -26,8 +26,8 @@ function stripAnsi(str) {
 }
 
 /**
- * Mengganti emoji lebar-ganda dengan tag ASCII 1-kolom dan membuang karakter non-ASCII lebar
- * agar tidak pernah menggeser border atau memicu line-wrap di terminal Windows.
+ * Replaces double-width emojis with 1-column ASCII tags and strips wide non-ASCII characters
+ * so borders never shift or trigger line-wrap in Windows terminals.
  */
 function sanitizeToSingleWidth(str) {
     return stripAnsi(str)
@@ -68,7 +68,7 @@ function formatCompactCoins(num) {
             return `${(num / val).toFixed(2)} ${suffix}`;
         }
     }
-    return num.toLocaleString('id-ID');
+    return num.toLocaleString('en-US');
 }
 
 function formatCountdown(ms) {
@@ -133,7 +133,7 @@ class LiveTUI {
         if (this.isAlive) return;
         this.isAlive = true;
 
-        // Masuk ke Alternate Screen Buffer & sembunyikan kursor
+        // Enter Alternate Screen Buffer & hide cursor
         process.stdout.write('\x1b[?1049h\x1b[?25l\x1b[2J');
 
         process.stdout.on('resize', () => {
@@ -166,7 +166,7 @@ class LiveTUI {
             process.stdin.pause();
         }
 
-        // Keluar dari Alternate Screen Buffer & tampilkan kembali kursor
+        // Exit Alternate Screen Buffer & restore cursor
         process.stdout.write('\x1b[?7h\x1b[?25h\x1b[?1049l');
         if (exitMessage) {
             console.log(exitMessage);
@@ -182,7 +182,7 @@ class LiveTUI {
         process.stdin.on('data', (key) => {
             if (!this.isAlive) return;
 
-            // Ctrl+C atau 'Q' untuk keluar
+            // Ctrl+C or 'Q' to quit
             if (key === '\u0003' || key === 'Q') {
                 this.actions.onQuit();
                 return;
@@ -352,7 +352,7 @@ class LiveTUI {
             ['a', 'Toggle Adventure'],
             ['t', 'Toggle Training'],
             ['w', 'Toggle Work'],
-            ['k', 'Ganti Jenis Work'],
+            ['k', 'Cycle Work Type'],
             ['f', 'Toggle Farm'],
             ['l', 'Toggle Auto-Lootbox'],
             ['v', 'Toggle Auto-Event'],
@@ -392,19 +392,19 @@ class LiveTUI {
                 : '';
         const xpStr =
             p.currentXp !== null && p.maxXp
-                ? `${p.currentXp.toLocaleString('id-ID')}/${p.maxXp.toLocaleString('id-ID')}${xpPct}`
-                : `- (+${p.sessionXp.toLocaleString('id-ID')} ses)`;
+                ? `${p.currentXp.toLocaleString('en-US')}/${p.maxXp.toLocaleString('en-US')}${xpPct}`
+                : `- (+${p.sessionXp.toLocaleString('en-US')} ses)`;
 
         let coinsStr;
         if (p.coins !== null) {
-            const fullCoins = `${p.coins.toLocaleString('id-ID')} (Bank: ${(p.bank || 0).toLocaleString('id-ID')}) [+${p.sessionCoins.toLocaleString('id-ID')}]`;
+            const fullCoins = `${p.coins.toLocaleString('en-US')} (Bank: ${(p.bank || 0).toLocaleString('en-US')}) [+${p.sessionCoins.toLocaleString('en-US')}]`;
             if (`Money: ${fullCoins}`.length <= maxWidth) {
                 coinsStr = fullCoins;
             } else {
-                coinsStr = `${formatCompactCoins(p.coins)} (Bank: ${formatCompactCoins(p.bank || 0)}) [+${p.sessionCoins.toLocaleString('id-ID')}]`;
+                coinsStr = `${formatCompactCoins(p.coins)} (Bank: ${formatCompactCoins(p.bank || 0)}) [+${p.sessionCoins.toLocaleString('en-US')}]`;
             }
         } else {
-            coinsStr = `+${p.sessionCoins.toLocaleString('id-ID')} (sesi)`;
+            coinsStr = `+${p.sessionCoins.toLocaleString('en-US')} (session)`;
         }
 
         const statsStr =
@@ -415,10 +415,10 @@ class LiveTUI {
         return [
             ['Account', `${p.username || 'Connecting...'} (${p.channelName || this.config.channelId})`],
             ['Level & Area', `${p.level || '-'} | Area: ${p.area || '-'}`],
-            ['XP Progress', `${xpStr} [+${p.sessionXp.toLocaleString('id-ID')}]`],
+            ['XP Progress', `${xpStr} [+${p.sessionXp.toLocaleString('en-US')}]`],
             ['HP & Stats', statsStr],
             ['Money', coinsStr],
-            ['Equipment', p.equipment || '- (tekan "u" untuk cek rpg p)'],
+            ['Equipment', p.equipment || '- (press "u" to check rpg p)'],
             ['Inv & Drop', `Ruby: ${p.rubies ?? 0} | Drop: ${p.lastDrop || 'None'}`],
         ];
     }
@@ -438,15 +438,15 @@ class LiveTUI {
     }
 
     /**
-     * Verifikasi ukuran terminal:
-     * SESUAI hanya jika PAS (w === 120 && h === 30), bukan kurang dan bukan lebih.
-     * Tidak menampilkan angka '120x30' pada teks rekomendasi.
+     * Terminal dimension verification:
+     * Exact match only when w === 120 && h === 30 (neither smaller nor larger).
+     * Never prints the target dimensions in the status badge.
      */
     _getTerminalVerification(w, h) {
         if (w === RECOMMENDED_COLS && h === RECOMMENDED_ROWS) {
             return {
-                badge: 'Terminal: [SESUAI]',
-                statusTag: '[SESUAI]',
+                badge: 'Terminal: [EXACT FIT]',
+                statusTag: '[EXACT FIT]',
                 level: 'ok',
             };
         }
@@ -456,29 +456,29 @@ class LiveTUI {
         const isSmallerW = w < RECOMMENDED_COLS;
         const isSmallerH = h < RECOMMENDED_ROWS;
 
-        let statusTag = '[TIDAK SESUAI]';
+        let statusTag = '[MISMATCH]';
         let level = 'warn';
 
         if (w < MIN_COMPACT_COLS || h < MIN_COMPACT_ROWS) {
-            statusTag = '[TERLALU KECIL]';
+            statusTag = '[TOO SMALL]';
             level = 'bad';
         } else if (w < MIN_FULL_COLS || h < MIN_FULL_ROWS) {
-            statusTag = '[MODE COMPACT]';
+            statusTag = '[COMPACT MODE]';
             level = 'bad';
         } else if (isLargerW && isLargerH) {
-            statusTag = '[TERLALU BESAR]';
+            statusTag = '[TOO LARGE]';
         } else if (isLargerW && !isSmallerH) {
-            statusTag = '[TERLALU LEBAR]';
+            statusTag = '[TOO WIDE]';
         } else if (isLargerH && !isSmallerW) {
-            statusTag = '[TERLALU TINGGI]';
+            statusTag = '[TOO TALL]';
         } else if (isSmallerW && isSmallerH) {
-            statusTag = '[KURANG BESAR]';
+            statusTag = '[UNDERFIT]';
         } else if (isSmallerW && !isLargerH) {
-            statusTag = '[KURANG LEBAR]';
+            statusTag = '[TOO NARROW]';
         } else if (isSmallerH && !isLargerW) {
-            statusTag = '[KURANG TINGGI]';
+            statusTag = '[TOO SHORT]';
         } else {
-            statusTag = '[TIDAK PAS]';
+            statusTag = '[MISMATCH]';
         }
 
         return {
@@ -499,9 +499,9 @@ class LiveTUI {
         const termCheck = this._getTerminalVerification(w, h);
 
         if (w < MIN_COMPACT_COLS || h < MIN_COMPACT_ROWS) {
-            const msg1 = '[TERMINAL TERLALU KECIL]';
-            const msg2 = `Ukuran saat ini: ${w} x ${h} ${termCheck.statusTag}`;
-            const msg3 = 'Sesuaikan ukuran jendela terminal agar semua info tampil.';
+            const msg1 = '[TERMINAL TOO SMALL]';
+            const msg2 = `Current size: ${w} x ${h} ${termCheck.statusTag}`;
+            const msg3 = 'Resize the terminal window to display all panels.';
             this._putStr(grid, Math.floor(h / 2) - 1, Math.max(0, Math.floor((w - msg1.length) / 2)), msg1);
             this._putStr(grid, Math.floor(h / 2), Math.max(0, Math.floor((w - msg2.length) / 2)), msg2);
             this._putStr(grid, Math.floor(h / 2) + 1, Math.max(0, Math.floor((w - msg3.length) / 2)), msg3);
@@ -512,7 +512,7 @@ class LiveTUI {
         const notifCount = this.notifications.length;
         const notifText =
             this.currentNotification ||
-            'Nothing new. (Discord tidak perlu fokus / bisa minimize)';
+            'Nothing new. (Discord does not need focus / can minimize)';
 
         const badge = termCheck.badge;
         const showBadge = w >= badge.length + 12;
@@ -550,7 +550,7 @@ class LiveTUI {
         grid[bottomSplitY][colWidth] = '┼';
         grid[bottomSplitY][rightColStart] = '┼';
 
-        // 1. ASCII Art Logo di Tengah Atas
+        // 1. Center-top ASCII Art Logo
         const logoWidth = Math.max(...LOGO_FULL.map((l) => l.length));
         const logoStartX = Math.max(colWidth + 2, midX - Math.floor(logoWidth / 2));
         for (let i = 0; i < LOGO_FULL.length; i++) {
@@ -564,7 +564,7 @@ class LiveTUI {
         const feedTitle = 'Latest Combat / Activity:';
         this._putStr(grid, logoBottomY + 1, midX - Math.floor(feedTitle.length / 2), feedTitle);
 
-        // 2. Panel Kiri Atas: TIMERS & CD (ALL)
+        // 2. Top-Left Panel: TIMERS & CD (ALL)
         const timerTitle = 'TIMERS & CD (ALL)';
         this._putStr(grid, 2, leftMidX - Math.floor(timerTitle.length / 2), timerTitle);
         const timers = this._getTimersList();
@@ -580,7 +580,7 @@ class LiveTUI {
             }
         }
 
-        // 3. Panel Kanan Atas: KEYBINDS
+        // 3. Top-Right Panel: KEYBINDS
         const keyTitle = 'KEYBINDS';
         this._putStr(grid, 2, rightMidX - Math.floor(keyTitle.length / 2), keyTitle);
         const keybinds = this._getKeybindsList();
@@ -593,7 +593,7 @@ class LiveTUI {
             }
         }
 
-        // 4. Panel Tengah: Latest Messages / Combat Feed (rata kiri rapi agar sejajar timestamp)
+        // 4. Center Panel: Latest Messages / Combat Feed (left-aligned for clean timestamps)
         const msgPanelTop = logoBottomY + 3;
         const msgPanelBottom = bottomSplitY - 1;
         const msgPanelHeight = Math.max(1, msgPanelBottom - msgPanelTop);
@@ -607,7 +607,7 @@ class LiveTUI {
             this._putStr(grid, startY + i, colWidth + 2, line);
         }
 
-        // 5. Panel Kiri Bawah: APP INFO
+        // 5. Bottom-Left Panel: APP INFO
         const appTitle = 'APP INFO';
         this._putStr(grid, bottomSplitY + 1, leftMidX - Math.floor(appTitle.length / 2), appTitle);
         const appInfo = this._getAppInfoList();
@@ -619,7 +619,7 @@ class LiveTUI {
             }
         }
 
-        // 6. Panel Tengah Bawah: CHARACTER & STATS
+        // 6. Bottom-Center Panel: CHARACTER & STATS
         const profTitle = 'CHARACTER & STATS';
         this._putStr(grid, bottomSplitY + 1, midX - Math.floor(profTitle.length / 2), profTitle);
         const profInfo = this._getProfileList(msgMaxWidth);
@@ -631,7 +631,7 @@ class LiveTUI {
             }
         }
 
-        // 7. Panel Kanan Bawah: CONFIG STATUS
+        // 7. Bottom-Right Panel: CONFIG STATUS
         const cfgTitle = 'CONFIG STATUS';
         this._putStr(grid, bottomSplitY + 1, rightMidX - Math.floor(cfgTitle.length / 2), cfgTitle);
         const cfgInfo = this._getConfigList();
@@ -685,7 +685,7 @@ class LiveTUI {
     }
 
     _flushGrid(grid, termCheck = null) {
-        // Explicit row positioning + disable line-wrap + synchronized output agar tidak pernah berantakan/scroll
+        // Explicit row positioning + disable line-wrap + synchronized output to prevent flicker/scroll
         let out = '\x1b[?2026h\x1b[?7l';
         for (let r = 0; r < grid.length; r++) {
             let line = grid[r].join('');
