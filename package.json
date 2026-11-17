@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "check": "node --check index.js && node --check config.js && node --check tui.js"
+    "headless": "node index.js --headless",
+    "check": "node --check index.js && node --check config.js && node --check tui.js && node --check telegram.js"
   },
   "dependencies": {
     "chalk": "^4.1.2",

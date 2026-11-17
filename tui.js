@@ -91,6 +91,16 @@ function formatCountdown(ms) {
     return `${String(s).padStart(2, '0')}s`;
 }
 
+function formatLocalTime(timezone = '') {
+    const opts = { hour12: false };
+    if (timezone) opts.timeZone = timezone;
+    try {
+        return new Date().toLocaleTimeString('en-GB', opts);
+    } catch (_) {
+        return new Date().toLocaleTimeString('en-GB', { hour12: false });
+    }
+}
+
 class LiveTUI {
     constructor(state, config, actions) {
         this.state = state;
@@ -368,7 +378,8 @@ class LiveTUI {
 
     _getAppInfoList() {
         let dspStatus = 'RUNNING';
-        if (this.state.isStopped) dspStatus = 'EPIC GUARD!';
+        if (this.state.isStopped) dspStatus = 'STOPPED';
+        else if (this.state.isGuardLocked) dspStatus = 'EPIC GUARD!';
         else if (this.state.isPaused) dspStatus = 'PAUSED';
         else if (this.state.isBusyWithPrompt) dspStatus = 'TRAINING...';
         else if (this.state.isProcessingQueue) dspStatus = 'SENDING';
@@ -713,4 +724,4 @@ function rowChar(existing, incoming) {
     return incoming;
 }
 
-module.exports = { LiveTUI, sanitizeToSingleWidth };
+module.exports = { LiveTUI, sanitizeToSingleWidth, formatCompactCoins, formatCountdown, formatLocalTime };

@@ -206,7 +206,38 @@ module.exports = {
         // Patreon donator cooldown reduction multiplier (1.0 = 0%, 0.9 = -10%, 0.8 = -20%, 0.65 = -35%)
         cdReductionMultiplier: 1.0,
 
-        // Show a desktop notification when EPIC GUARD is detected
+        // Show a desktop notification when EPIC GUARD is detected (ignored in headless mode)
         desktopNotificationOnGuard: true,
+
+        // Check the last messages in the target channel on startup for pending EPIC GUARD / jail state
+        startupGuardCheck: true,
+    },
+
+    // ==========================================
+    // RUNTIME & REMOTE CONTROL (VM / HEADLESS / TELEGRAM)
+    // ==========================================
+    runtime: {
+        // Automatically falls back to clean plain-text logs when running without an interactive TTY or with --headless
+        headless:
+            process.argv.includes('--headless') ||
+            String(process.env.HEADLESS || '').toLowerCase() === 'true' ||
+            !process.stdout.isTTY ||
+            !process.stdin.isTTY,
+        // Optional IANA timezone for logs & Telegram panel (e.g., Asia/Jakarta); defaults to system timezone
+        timezone: (process.env.TIMEZONE || '').trim(),
+    },
+
+    telegram: {
+        // Enabled automatically when both TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are set in .env
+        enabled: Boolean(
+            (process.env.TELEGRAM_BOT_TOKEN || '').trim() &&
+                (process.env.TELEGRAM_CHAT_ID || '').trim()
+        ),
+        botToken: (process.env.TELEGRAM_BOT_TOKEN || '').trim(),
+        chatId: String(process.env.TELEGRAM_CHAT_ID || '').trim(),
+        pollTimeoutSec: 25,
+        // Safe hybrid live auto-refresh on the Telegram panel (periodic + debounced activity updates)
+        liveAutoUpdate: String(process.env.TELEGRAM_LIVE_AUTO || 'true').toLowerCase() !== 'false',
+        liveIntervalSec: Math.max(8, parseInt(process.env.TELEGRAM_LIVE_INTERVAL_SEC || '12', 10) || 12),
     },
 };

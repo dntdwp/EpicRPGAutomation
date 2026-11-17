@@ -2,7 +2,8 @@ const { Client } = require('discord.js-selfbot-v13');
 const chalk = require('chalk');
 const notifier = require('node-notifier');
 const config = require('./config');
-const { LiveTUI, sanitizeToSingleWidth } = require('./tui');
+const { LiveTUI, sanitizeToSingleWidth, formatLocalTime } = require('./tui');
+const { TelegramControl } = require('./telegram');
 
 const client = new Client({
     checkUpdate: false,
@@ -13,6 +14,9 @@ const MINUTE_MS = 60 * 1000;
 const state = {
     isStopped: false,
     isPaused: false,
+    isGuardLocked: false,
+    lastGuardReason: '',
+    lastGuardUrl: '',
     isBusyWithPrompt: false,
     busyTimeout: null,
     targetChannel: null,
@@ -80,6 +84,7 @@ const state = {
 };
 
 let tui = null;
+let telegramControl = null;
 
 function randomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -90,7 +95,7 @@ function sleep(ms) {
 }
 
 function timestamp() {
-    return new Date().toLocaleTimeString('en-GB', { hour12: false });
+    return formatLocalTime(config.runtime.timezone);
 }
 
 function setBusyLock(locked, maxDurationMs = 8000) {
@@ -106,7 +111,7 @@ function setBusyLock(locked, maxDurationMs = 8000) {
             if (tui) tui.render();
             processQueue();
         }, maxDurationMs);
-    } else {
+    } else if (!state.isGuardLocked && !state.isPaused && !state.isStopped) {
         processQueue();
     }
     if (tui) tui.render();
@@ -119,18 +124,29 @@ function pushFeedLine(line) {
             .replace(/<:[a-zA-Z0-9_]+:\d+>/g, '')
     );
     if (!clean) return;
-    state.recentLines.push(`[${timestamp()}] ${clean}`);
-    if (state.recentLines.length > 25) {
+    const formatted = `[${timestamp()}] ${clean}`;
+    state.recentLines.push(formatted);
+    if (state.recentLines.length > 30) {
         state.recentLines.shift();
     }
-    if (tui) tui.render();
+    if (tui && tui.isAlive) {
+        tui.render();
+    } else {
+        console.log(formatted);
+    }
+    if (telegramControl) {
+        telegramControl.notifyActivity();
+    }
 }
 
 function notifyUi(msg, prioSec = 4) {
     if (tui && tui.isAlive) {
         tui.notify(msg, prioSec);
-    } else {
+    } else if (!String(msg).startsWith('[*] Sent "')) {
         console.log(`[${timestamp()}] ${msg}`);
+    }
+    if (telegramControl && String(msg).includes('updated!')) {
+        telegramControl.notifyActivity();
     }
 }
 
@@ -139,7 +155,7 @@ function notifyUi(msg, prioSec = 4) {
  * or interrupt interactive prompts such as 'rpg training'
  */
 function enqueueCommand(cmd, label = 'CMD', priority = false, manual = false) {
-    if (state.isStopped) return;
+    if (state.isStopped || state.isGuardLocked) return;
     if (state.isPaused && !manual) return;
 
     if (priority) {
@@ -153,10 +169,22 @@ function enqueueCommand(cmd, label = 'CMD', priority = false, manual = false) {
 }
 
 async function processQueue() {
-    if (state.isProcessingQueue || state.isStopped || state.isBusyWithPrompt) return;
+    if (
+        state.isProcessingQueue ||
+        state.isStopped ||
+        state.isGuardLocked ||
+        state.isBusyWithPrompt
+    ) {
+        return;
+    }
     state.isProcessingQueue = true;
 
-    while (state.queue.length > 0 && !state.isStopped && !state.isBusyWithPrompt) {
+    while (
+        state.queue.length > 0 &&
+        !state.isStopped &&
+        !state.isGuardLocked &&
+        !state.isBusyWithPrompt
+    ) {
         const { cmd, label } = state.queue.shift();
         try {
             if (!state.targetChannel) {
@@ -198,7 +226,7 @@ async function processQueue() {
  * Schedules the next execution of a command with random jitter
  */
 function scheduleNext(key, customDelayMs = null) {
-    if (state.isStopped) return;
+    if (state.isStopped || state.isGuardLocked) return;
     const cmdCfg = config.commands[key];
 
     if (state.timers[key]) {
@@ -228,7 +256,7 @@ function scheduleNext(key, customDelayMs = null) {
     }
 
     state.timers[key] = setTimeout(() => {
-        if (state.isStopped) return;
+        if (state.isStopped || state.isGuardLocked) return;
         if (!state.isPaused && config.commands[key].enabled) {
             enqueueCommand(config.commands[key].cmd, key);
         }
@@ -238,44 +266,96 @@ function scheduleNext(key, customDelayMs = null) {
     if (tui) tui.render();
 }
 
-/**
- * Halts all automation immediately when EPIC GUARD appears and alerts the user for manual verification
- */
-function handleEpicGuard(reasonText) {
-    if (state.isStopped) return;
-    state.isStopped = true;
+function extractMessageText(message) {
+    const content = message?.content || '';
+    const lowerContent = content.toLowerCase();
 
-    Object.values(state.timers).forEach((t) => {
-        if (t) clearTimeout(t);
-    });
+    let embedText = '';
+    let embedTitle = '';
+    let embedDesc = '';
+    if (message?.embeds && message.embeds.length > 0) {
+        const emb = message.embeds[0];
+        embedTitle = emb.author?.name || emb.title || '';
+        embedDesc = emb.description || '';
+        embedText = [
+            embedTitle,
+            embedDesc,
+            emb.footer?.text || '',
+            ...(emb.fields ? emb.fields.map((f) => `${f.name}: ${f.value}`) : []),
+        ].join(' ');
+    }
+    const combinedLower = `${lowerContent} ${embedText.toLowerCase()}`;
+    return { content, lowerContent, embedText, embedTitle, embedDesc, combinedLower };
+}
+
+function isGuardOrJailAlert(combinedLower) {
+    if (!combinedLower) return false;
+    // Do not treat clearance confirmations ("Fine, I will let you go...") as a guard block
+    if (
+        combinedLower.includes('let you go') ||
+        combinedLower.includes('be careful next time')
+    ) {
+        return false;
+    }
+    return (
+        combinedLower.includes('epic guard') ||
+        combinedLower.includes(':police_car:') ||
+        combinedLower.includes('🚓') ||
+        combinedLower.includes('stop there') ||
+        combinedLower.includes('you are in the jail') ||
+        combinedLower.includes('is now in the jail')
+    );
+}
+
+/**
+ * Locks and pauses all automation when EPIC GUARD or Jail is detected, alerting the user for manual verification
+ */
+function handleEpicGuard(reasonText, message = null) {
+    if (state.isStopped || state.isGuardLocked) return;
+    state.isGuardLocked = true;
+    state.isPaused = true;
+
+    for (const key of Object.keys(state.timers)) {
+        if (state.timers[key]) {
+            clearTimeout(state.timers[key]);
+            state.timers[key] = null;
+        }
+    }
+    if (state.busyTimeout) {
+        clearTimeout(state.busyTimeout);
+        state.busyTimeout = null;
+    }
+    state.isBusyWithPrompt = false;
     state.queue = [];
 
-    pushFeedLine('🚨 EPIC GUARD DETECTED! Bot stopped automatically.');
-    notifyUi('[!] EPIC GUARD DETECTED! Check Discord immediately!', 30);
+    const guildPart = message?.guildId || '@me';
+    const chPart = message?.channel?.id || config.channelId;
+    const msgPart = message?.id ? `/${message.id}` : '';
+    const discordUrl = `https://discord.com/channels/${guildPart}/${chPart}${msgPart}`;
+
+    state.lastGuardUrl = discordUrl;
+    state.lastGuardReason = String(reasonText || '').slice(0, 300);
+
+    pushFeedLine('🚨 EPIC GUARD DETECTED! Automation locked (manual verify needed).');
+    notifyUi('[!] EPIC GUARD! Verify in Discord, then press "p" or Resume in Telegram.', 60);
 
     process.stdout.write('\x07');
 
-    const exitMsg =
-        chalk.bgRed.white.bold('\n 🚨 WARNING: EPIC GUARD DETECTED! 🚨 \n') +
-        chalk.yellow(
-            'Automation was stopped automatically to protect your account.\nPlease open Discord and complete the verification manually!\n'
-        ) +
-        chalk.gray(`Details: ${String(reasonText).slice(0, 200)}\n`);
-
-    if (config.safety.desktopNotificationOnGuard) {
+    if (!config.runtime.headless && config.safety.desktopNotificationOnGuard) {
         notifier.notify({
             title: '🚨 EPIC GUARD Detected!',
             message:
-                'Automation paused/stopped. Open Discord immediately and complete the verification manually.',
+                'Automation paused safely. Open Discord, complete verification manually, then Resume.',
             sound: true,
             wait: false,
         });
     }
 
-    setTimeout(() => {
-        if (tui) tui.stop(exitMsg);
-        process.exit(0);
-    }, 1500);
+    if (telegramControl) {
+        telegramControl.sendGuardAlert(state.lastGuardReason, discordUrl);
+    }
+
+    if (tui) tui.render();
 }
 
 /**
@@ -877,9 +957,22 @@ function getChannelMonitorFlags(channelId) {
     };
 }
 
-// Also watch messageUpdate because events, arena & miniboss often appear/end via message edits
+// Also watch messageUpdate because events, arena, miniboss, and guard prompts can arrive/change via message edits
 client.on('messageUpdate', async (_oldMsg, newMsg) => {
     if (state.isStopped || !newMsg.channel?.id) return;
+
+    if (
+        newMsg.channel.id === config.channelId &&
+        newMsg.author?.id === config.epicRpgBotId
+    ) {
+        const { content, embedText, combinedLower } = extractMessageText(newMsg);
+        if (isGuardOrJailAlert(combinedLower)) {
+            handleEpicGuard(content || embedText, newMsg);
+            return;
+        }
+    }
+
+    if (state.isGuardLocked) return;
     const flags = getChannelMonitorFlags(newMsg.channel.id);
     if (flags.allowEvents || flags.allowArena || flags.allowMiniboss) {
         await handleMonitoredChannelMessage(newMsg, flags);
@@ -887,7 +980,7 @@ client.on('messageUpdate', async (_oldMsg, newMsg) => {
 });
 
 client.on('messageCreate', async (message) => {
-    if (state.isStopped) return;
+    if (state.isStopped || state.isGuardLocked) return;
 
     const flags = getChannelMonitorFlags(message.channel.id);
     if (
@@ -910,33 +1003,12 @@ client.on('messageCreate', async (message) => {
         }).catch(() => {});
     }
 
-    const content = message.content || '';
-    const lowerContent = content.toLowerCase();
+    const { content, lowerContent, embedText, embedTitle, combinedLower } =
+        extractMessageText(message);
 
-    let embedText = '';
-    let embedTitle = '';
-    let embedDesc = '';
-    if (message.embeds && message.embeds.length > 0) {
-        const emb = message.embeds[0];
-        embedTitle = emb.author?.name || emb.title || '';
-        embedDesc = emb.description || '';
-        embedText = [
-            embedTitle,
-            embedDesc,
-            emb.footer?.text || '',
-            ...(emb.fields ? emb.fields.map((f) => `${f.name}: ${f.value}`) : []),
-        ].join(' ');
-    }
-    const combinedLower = `${lowerContent} ${embedText.toLowerCase()}`;
-
-    // 1. EPIC GUARD detection (must stop and prompt user to verify manually in Discord)
-    if (
-        combinedLower.includes('epic guard') ||
-        combinedLower.includes(':police_car:') ||
-        combinedLower.includes('🚓') ||
-        combinedLower.includes('stop there')
-    ) {
-        handleEpicGuard(content || embedText);
+    // 1. EPIC GUARD / Jail detection (lock automation and alert user to verify manually in Discord)
+    if (isGuardOrJailAlert(combinedLower)) {
+        handleEpicGuard(content || embedText, message);
         return;
     }
 
@@ -1215,9 +1287,78 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// Interactive keyboard handlers for Live TUI
+function startMainLoops(forceSyncCd = false) {
+    if (state.isStopped || state.isGuardLocked) return;
+
+    // Fetch profile & inventory once (Level, XP, Money, Equipment, Ruby) then sync cooldowns
+    enqueueCommand('rpg p', 'profile');
+    enqueueCommand('rpg i', 'inv');
+    if (forceSyncCd || config.safety.syncCooldownOnStart) {
+        enqueueCommand('rpg cd', 'cd');
+    }
+
+    // Schedule enabled commands from config.commands
+    for (const [key, cmdCfg] of Object.entries(config.commands)) {
+        if (cmdCfg.enabled && cmdCfg.cmd) {
+            if (!forceSyncCd && !config.safety.syncCooldownOnStart) {
+                enqueueCommand(cmdCfg.cmd, key);
+            }
+            scheduleNext(key);
+        }
+    }
+}
+
+async function checkInitialGuardState() {
+    if (!config.safety.startupGuardCheck || !state.targetChannel) return false;
+    try {
+        const recent = await state.targetChannel.messages.fetch({ limit: 5 });
+        const sorted = Array.from(recent.values()).sort(
+            (a, b) => (b.createdTimestamp || 0) - (a.createdTimestamp || 0)
+        );
+        const now = Date.now();
+
+        for (const msg of sorted) {
+            if (msg.author?.id !== config.epicRpgBotId) continue;
+            const { content, embedText, combinedLower } = extractMessageText(msg);
+
+            if (
+                combinedLower.includes('let you go') ||
+                combinedLower.includes('be careful next time') ||
+                combinedLower.includes('earned ') ||
+                combinedLower.includes('found and killed') ||
+                combinedLower.includes('cooldowns') ||
+                combinedLower.includes('profile') ||
+                combinedLower.includes('inventory') ||
+                combinedLower.includes('is training in the')
+            ) {
+                return false;
+            }
+
+            if (isGuardOrJailAlert(combinedLower)) {
+                const isJail =
+                    combinedLower.includes('you are in the jail') ||
+                    combinedLower.includes('is now in the jail');
+                const isRecentPrompt = now - (msg.createdTimestamp || 0) < 120000;
+                if (isJail || isRecentPrompt) {
+                    handleEpicGuard(content || embedText, msg);
+                    return true;
+                }
+                return false;
+            }
+        }
+    } catch (err) {
+        pushFeedLine(`[WARN] Startup guard check skipped: ${err.message}`);
+    }
+    return false;
+}
+
+// Interactive keyboard & remote control handlers
 const tuiActions = {
     onTogglePause() {
+        if (state.isGuardLocked) {
+            tuiActions.onResumeFromGuard();
+            return;
+        }
         state.isPaused = !state.isPaused;
         if (state.isPaused) {
             notifyUi('[!] Bot PAUSED. Press "p" again to resume.', 5);
@@ -1226,6 +1367,17 @@ const tuiActions = {
             notifyUi('[*] Bot RESUMED.', 4);
             pushFeedLine('--- Bot Resumed (RUNNING) ---');
         }
+    },
+    onResumeFromGuard() {
+        if (!state.isGuardLocked && !state.isPaused) return;
+        state.isGuardLocked = false;
+        state.isPaused = false;
+        state.lastGuardReason = '';
+        state.lastGuardUrl = '';
+        notifyUi('[*] Guard lock cleared. Syncing profile & cooldowns...', 5);
+        pushFeedLine('--- Guard unlocked manually. Resuming automation ---');
+        startMainLoops(true);
+        if (tui) tui.render();
     },
     onToggleFeature(key) {
         const cmdCfg = config.commands[key];
@@ -1295,12 +1447,22 @@ const tuiActions = {
         }
     },
     onQuit() {
+        if (state.isStopped) return;
         state.isStopped = true;
         Object.values(state.timers).forEach((t) => {
             if (t) clearTimeout(t);
         });
+        if (state.busyTimeout) {
+            clearTimeout(state.busyTimeout);
+            state.busyTimeout = null;
+        }
+        if (telegramControl) {
+            telegramControl.stop();
+        }
         if (tui) {
             tui.stop(chalk.yellow('\n[!] Bot stopped by user (Quit).\n'));
+        } else {
+            console.log(chalk.yellow('\n[!] Bot stopped cleanly.\n'));
         }
         client.destroy();
         process.exit(0);
@@ -1318,6 +1480,12 @@ client.on('ready', async () => {
     } catch (err) {
         if (tui) {
             tui.stop(
+                chalk.red(
+                    `\n[E] Failed to access CHANNEL_ID (${config.channelId}): ${err.message}\n`
+                )
+            );
+        } else {
+            console.error(
                 chalk.red(
                     `\n[E] Failed to access CHANNEL_ID (${config.channelId}): ${err.message}\n`
                 )
@@ -1347,21 +1515,13 @@ client.on('ready', async () => {
         }
     }
 
-    // Fetch profile & inventory once at startup (Level, XP, Money, Equipment, Ruby) then sync cooldowns
-    enqueueCommand('rpg p', 'profile');
-    enqueueCommand('rpg i', 'inv');
-    if (config.safety.syncCooldownOnStart) {
-        enqueueCommand('rpg cd', 'cd');
+    const guardPendingOnStart = await checkInitialGuardState();
+    if (!guardPendingOnStart) {
+        startMainLoops(false);
     }
 
-    // Schedule enabled commands from config.commands
-    for (const [key, cmdCfg] of Object.entries(config.commands)) {
-        if (cmdCfg.enabled && cmdCfg.cmd) {
-            if (!config.safety.syncCooldownOnStart) {
-                enqueueCommand(cmdCfg.cmd, key);
-            }
-            scheduleNext(key);
-        }
+    if (telegramControl) {
+        telegramControl.sendStartupNotice().catch(() => {});
     }
 });
 
@@ -1383,21 +1543,40 @@ function startBot() {
         process.exit(1);
     }
 
-    tui = new LiveTUI(state, config, tuiActions);
-    tui.start();
-    tui.notify('[*] Connecting to Discord Gateway...', 4);
+    if (!config.runtime.headless) {
+        tui = new LiveTUI(state, config, tuiActions);
+        tui.start();
+        tui.notify('[*] Connecting to Discord Gateway...', 4);
+    } else {
+        console.log(`[${timestamp()}] [*] Running in Headless / Non-TUI mode.`);
+        console.log(`[${timestamp()}] [*] Connecting to Discord Gateway...`);
+    }
+
+    if (config.telegram.enabled) {
+        telegramControl = new TelegramControl(state, config, tuiActions, {
+            info: (msg) => pushFeedLine(msg),
+            error: (msg) => pushFeedLine(msg),
+        });
+        telegramControl.start();
+    } else if (config.runtime.headless) {
+        console.log(
+            `[${timestamp()}] [!] Telegram remote panel disabled (set TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID in .env to enable).`
+        );
+    }
 
     client.login(config.token).catch((err) => {
+        const msg = `\n[E] Failed to log in to Discord. Check your TOKEN in .env!\nDetails: ${err.message}\n`;
         if (tui) {
-            tui.stop(
-                chalk.red.bold(
-                    `\n[E] Failed to log in to Discord. Check your TOKEN in .env!\nDetails: ${err.message}\n`
-                )
-            );
+            tui.stop(chalk.red.bold(msg));
+        } else {
+            console.error(chalk.red.bold(msg));
         }
         process.exit(1);
     });
 }
+
+process.on('SIGINT', () => tuiActions.onQuit());
+process.on('SIGTERM', () => tuiActions.onQuit());
 
 // Crash protection: catch unhandledRejection (e.g., HTTP 400 / code 50035 when an event button closes right before click)
 process.on('unhandledRejection', (reason) => {

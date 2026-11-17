@@ -11,6 +11,10 @@ node_modules/
 npm-debug.log*
 bot.log
 
+# Archives (prevent accidental commit of bundles containing .env)
+*.tar.gz
+*.zip
+
 # OS & editor files
 .DS_Store
 Thumbs.db
